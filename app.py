@@ -99,6 +99,12 @@ def generate_formation(team_size, formation_type):
 
     return "\n".join(formation_lines)
 
+def format_time(seconds):
+    """
+    Returns cheer-friendly time labels (seconds + 8-counts).
+    """
+    eight_counts = max(1, round(seconds / 15))
+    return f"{seconds} sec | {eight_counts}×8"
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -106,57 +112,51 @@ def index():
     routine = None
 
     if request.method == "POST":
-        mode = request.form.get("mode")
+        # --- Read inputs safely ---
+        mode = request.form.get("mode", "").strip().lower()
         level = request.form.get("level")
         team_size = int(request.form.get("team_size"))
         length = int(request.form.get("length"))
 
-        # =========================
-        # GAME DAY MODE (FIXED)
-        # =========================
-        if mode == "Game Day":
-            band_chant = 60
-            cheer = 60
-            fight_song = 60
-
-            band_visual = generate_formation(team_size, 2)
-            cheer_visual = generate_formation(team_size, 3)
-            fight_visual = generate_formation(team_size, 1)
-
+        # =====================================================
+        # GAME DAY MODE (FIXED STRUCTURE)
+        # =====================================================
+        if mode == "game day":
             routine = (
                 "📣 GAME DAY CHEER ROUTINE 📣\n\n"
-                f"Mode: Game Day\n"
                 f"Team Size: {team_size} athletes\n"
                 "Total Length: 3 minutes\n\n"
                 "🧭 GAME DAY SECTIONS 🧭\n\n"
-                f"1️⃣ Band Chant (1:00)\n"
-                f"{band_visual}\n\n"
+                "1️⃣ Band Chant (1:00)\n"
+                f"{generate_formation(team_size, 'block')}\n\n"
                 "   • Sharp motions, chant with band hits\n\n"
-                f"2️⃣ Cheer (1:00)\n"
-                f"{cheer_visual}\n\n"
-                "   • Crowd interaction, clean motions, volume\n\n"
-                f"3️⃣ Fight Song (1:00)\n"
-                f"{fight_visual}\n\n"
-                "   • Traditional motions, strong ending pose\n\n"
+                "2️⃣ Cheer (1:00)\n"
+                f"{generate_formation(team_size, 'block')}\n\n"
+                "   • Crowd interaction, clean motions\n\n"
+                "3️⃣ Fight Song (1:00)\n"
+                f"{generate_formation(team_size, 'wide')}\n\n"
+                "   • Wide, crowd-facing finish\n\n"
                 "💖 Coach Tip:\n"
-                "Game day routines should be LOUD, clean, and easy for the crowd to follow!"
+                "Game day routines should be LOUD, simple, and easy for the crowd to follow!"
             )
 
-        # =========================
-        # COMPETITION MODE
-        # =========================
+        # =====================================================
+        # COMPETITION MODE (COACH-CONTROLLED)
+        # =====================================================
         else:
-            total_seconds = length * 60
+            selected_sections = request.form.getlist("sections")
 
-            opening = int(total_seconds * 0.15)
-            jumps = int(total_seconds * 0.20)
-            stunts = int(total_seconds * 0.30)
-            pyramids = int(total_seconds * 0.20)
-            ending = total_seconds - (opening + jumps + stunts + pyramids)
+            # Safety fallback
+            if not selected_sections:
+                selected_sections = ["opening", "ending"]
+
+            total_seconds = length * 60
+            section_time = total_seconds // len(selected_sections)
 
             difficulty = 0
             reasons = []
 
+            # --- Base difficulty ---
             if level == "Beginner":
                 difficulty += 3
                 reasons.append("Beginner skill level")
@@ -170,55 +170,81 @@ def index():
             difficulty += 2
             reasons.append("Competition routine structure")
 
-            difficulty = min(difficulty, 10)
+            routine_blocks = []
+            section_number = 1
 
-            opening_visual = generate_formation(team_size, "block")
-            jumps_visual = generate_formation(team_size, "block")
-            stunts_visual = generate_formation(team_size, "stunts")
-            pyramids_visual = generate_formation(team_size, "pyramid")
-            ending_visual = generate_formation(team_size, "wide")
+            for section in selected_sections:
+                # ---------- OPENING ----------
+                if section == "opening":
+                    routine_blocks.append(
+                        f"{section_number}️⃣ Opening ({format_time(section_time)})\n"
+                        f"{generate_formation(team_size, 'block')}\n"
+                    )
+                    section_number += 1
 
+                # ---------- JUMPS ----------
+                elif section == "jumps":
+                    routine_blocks.append(
+                        f"{section_number}️⃣ Jumps{format_time(section_time)})\n" 
+                        f"{generate_formation(team_size, 'block')}\n"
+                    )
+                    section_number += 1
 
+                # ---------- TUMBLING ----------
+                elif section == "tumbling":
+                    routine_blocks.append(
+                        f"{section_number}️⃣ Tumbling ({format_time(section_time)})\n" 
+                        f"{generate_formation(team_size, 'block')}\n"
+                    )
+                    difficulty = min(difficulty + 1, 10)
+                    reasons.append("Tumbling section included")
+                    section_number += 1
 
+                # ---------- STUNTS (PODS OF 4) ----------
+                elif section == "stunts":
+                    routine_blocks.append(
+                        f"{section_number}️⃣ Stunts ({format_time(section_time)})\n"
+                        f"{generate_formation(team_size, 'stunts')}\n"
+                    )
+                    difficulty = min(difficulty + 2, 10)
+                    reasons.append("Stunt section included")
+                    section_number += 1
 
-            if level == "Beginner":
-                pyramid_plan = "Simple pyramid with preps and spotters."
-            elif level == "Intermediate":
-                pyramid_plan = "Two-group pyramid with clean connections."
-            else:
-                pyramid_plan = "Extended pyramid with connection and controlled dismount."
+                # ---------- PYRAMIDS ----------
+                elif section == "pyramids":
+                    routine_blocks.append(
+                        f"{section_number}️⃣ Pyramids ({format_time(section_time)})\n"
+                        f"{generate_formation(team_size, 'pyramid')}\n"
+                        "Pyramid plan: Connected stunt groups with clean transitions.\n"
+                    )
+                    difficulty = min(difficulty + 2, 10)
+                    reasons.append("Pyramid section included")
+                    section_number += 1
 
-            safety = []
-            if team_size < 10:
-                safety.append("⚠️ Small team — pyramids should be minimal.")
-            if level == "Beginner":
-                safety.append("⚠️ Beginner level — prioritize stability over difficulty.")
-            if team_size >= 15:
-                safety.append("✔ Team size supports safer multi-group pyramids.")
+                # ---------- ENDING ----------
+                elif section == "ending":
+                    routine_blocks.append(
+                        f"{section_number}️⃣ Ending ({format_time(section_time)})\n"
+                        f"{generate_formation(team_size, 'wide')}\n"
+                    )
+                    section_number += 1
 
             routine = (
-                "🏆 COMPETITION CHEER ROUTINE 🏆\n\n"
-                f"Mode: Competition\n"
+                "🏆 CUSTOM COMPETITION ROUTINE 🏆\n\n"
                 f"Skill Level: {level}\n"
                 f"Team Size: {team_size} athletes\n"
                 f"Routine Length: {length} minutes\n\n"
                 f"🔥 Difficulty Score: {difficulty}/10 🔥\n"
                 "Why this score:\n"
                 + "\n".join([f"• {r}" for r in reasons]) + "\n\n"
-                "🧭 COMPETITION ROUTINE BREAKDOWN 🧭\n\n"
-                f"1️⃣ Opening ({opening} sec)\n{opening_visual}\n\n"
-                f"2️⃣ Jumps ({jumps} sec)\n{jumps_visual}\n\n"
-                f"3️⃣ Stunts ({stunts} sec)\n{stunts_visual}\n\n"
-                f"4️⃣ Pyramids ({pyramids} sec)\n{pyramids_visual}\n"
-                f"   Pyramid plan: {pyramid_plan}\n\n"
-                f"5️⃣ Ending ({ending} sec)\n{ending_visual}\n\n"
-                "⚠️ SAFETY NOTES ⚠️\n"
-                + ("\n".join(safety) if safety else "• No major safety concerns detected.") +
-                "\n\n💖 Coach Tip:\n"
-                "Clean transitions and visuals win competition scores!"
+                "🧭 SELECTED ROUTINE SECTIONS 🧭\n\n"
+                + "\n".join(routine_blocks) +
+                "\n💖 Coach Tip:\n"
+                "Build routines around your team’s strengths — not every team needs every section!"
             )
 
     return render_template("index.html", routine=routine)
+
 
 
 if __name__ == "__main__":
