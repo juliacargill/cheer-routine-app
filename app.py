@@ -185,7 +185,7 @@ def index():
                 # ---------- JUMPS ----------
                 elif section == "jumps":
                     routine_blocks.append(
-                        f"{section_number}️⃣ Jumps{format_time(section_time)})\n" 
+                        f"{section_number}️⃣ Jumps({format_time(section_time)})\n" 
                         f"{generate_formation(team_size, 'block')}\n"
                     )
                     section_number += 1
